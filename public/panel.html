@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="es">
+
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Turnero · Panel</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    </head>
+
+    <body class="bg-[#F3EAD9] text-neutral-900 min-h-screen">
+        <main class="max-w-xl mx-auto p-6">
+            <h1 class="text-3xl font-bold text-[#6B1020] mb-6">Panel del negocio</h1>
+
+            <!-- LOGIN -->
+            <form id="login" class="bg-white rounded-xl shadow p-5 space-y-4">
+                <div>
+                    <label for="email" class="block text-sm font-medium mb-1">Email</label>
+                    <input id="email" type="email" required
+                        class="w-full border border-neutral-300 rounded-lg px-3 py-2">
+                </div>
+                <div>
+                    <label for="clave" class="block text-sm font-medium mb-1">Contraseña</label>
+                    <input id="clave" type="password" required
+                        class="w-full border border-neutral-300 rounded-lg px-3 py-2">
+                </div>
+                <button
+                    class="w-full bg-[#6B1020] text-white font-semibold rounded-lg py-2 hover:opacity-90">Ingresar</button>
+                <p id="loginMsg" class="text-sm text-red-700"></p>
+            </form>
+
+
+            <p id="linkRegistro" class="text-sm text-center mt-4">
+                ¿Todavía no tenés cuenta? <button id="irRegistro" class="underline text-[#6B1020]">Registrá tu
+                    negocio</button>
+            </p>
+
+            <!-- REGISTRO -->
+            <form id="registro" class="hidden bg-white rounded-xl shadow p-5 space-y-4">
+                <h2 class="text-xl font-semibold text-[#6B1020]">Registrá tu negocio</h2>
+                <input id="rNegocio" required maxlength="80" placeholder="Nombre del negocio"
+                    class="w-full border border-neutral-300 rounded-lg px-3 py-2">
+                <select id="rRubro" required class="w-full border border-neutral-300 rounded-lg px-3 py-2">
+                    <option value="consultorio">Consultorio</option>
+                    <option value="peluqueria">Peluquería</option>
+                    <option value="estetica">Estética</option>
+                </select>
+                <input id="rEmail" type="email" required placeholder="Email"
+                    class="w-full border border-neutral-300 rounded-lg px-3 py-2">
+                <input id="rClave" type="password" required minlength="8" placeholder="Contraseña (mínimo 8 caracteres)"
+                    class="w-full border border-neutral-300 rounded-lg px-3 py-2">
+                <button class="w-full bg-[#6B1020] text-white font-semibold rounded-lg py-2 hover:opacity-90">Crear
+                    cuenta</button>
+                <p id="regMsg" class="text-sm"></p>
+                <p class="text-sm text-center"><button type="button" id="irLogin" class="underline text-[#6B1020]">Ya
+                        tengo cuenta</button></p>
+            </form>
+
+            <!-- PANEL -->
+            <section id="panel" class="hidden">
+                <div class="flex justify-between items-center mb-4">
+                    <p id="quien" class="text-sm text-neutral-600"></p>
+                    <button id="salir" class="text-sm underline text-[#6B1020]">Salir</button>
+                </div>
+                <h2 id="negocioNombre" class="text-xl font-semibold text-[#6B1020] mb-4"></h2>
+
+                <form id="nuevo" class="bg-white rounded-xl shadow p-5 space-y-4 mb-6">
+                    <input id="nombre" required maxlength="80" placeholder="Nombre del servicio"
+                        class="w-full border border-neutral-300 rounded-lg px-3 py-2">
+                    <input id="duracion" type="number" min="5" step="5" required placeholder="Duración en minutos"
+                        class="w-full border border-neutral-300 rounded-lg px-3 py-2">
+                    <button
+                        class="w-full bg-[#6B1020] text-white font-semibold rounded-lg py-2 hover:opacity-90">Agregar
+                        servicio</button>
+                    <p id="msg" class="text-sm"></p>
+                </form>
+
+                <ul id="lista" class="space-y-2"></ul>
+            </section>
+        </main>
+
+        <script>
+            // Estos dos datos son públicos y van en el navegador. NO uses acá la clave secreta.
+            const SUPABASE_URL = 'https://lqaxmfivklypaqjszxjs.supabase.co';
+            const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_y2lPfv1gwxBS0Xdtu31mTA_7vuPuUzH';
+
+            const db = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+            const $ = (id) => document.getElementById(id);
+            let negocio = null;
+
+            async function mostrar() {
+                const { data: { session } } = await db.auth.getSession();
+                $('login').classList.toggle('hidden', !!session);
+                $('linkRegistro').classList.toggle('hidden', !!session);
+                if (session) $('registro').classList.add('hidden');
+                $('panel').classList.toggle('hidden', !session);
+                if (!session) return;
+                $('quien').textContent = session.user.email;
+                const { data: negocios } = await db.from('negocios').select('*').limit(1);
+                negocio = negocios && negocios[0];
+                const meta = session.user.user_metadata || {};
+                if (!negocio && meta.negocio_nombre) {
+                    const { data: nuevo } = await db.from('negocios')
+                        .insert({ nombre: meta.negocio_nombre, rubro: meta.rubro || 'consultorio' })
+                        .select().single();
+                    negocio = nuevo;
+                }
+                $('negocioNombre').textContent = negocio ? negocio.nombre : 'Todavía no tenés un negocio asociado';
+                cargarServicios();
+            }
+
+            async function cargarServicios() {
+                const { data, error } = await db.from('servicios').select('*').order('nombre');
+                const ul = $('lista');
+                ul.replaceChildren();
+                if (error) return;
+                data.forEach((s) => {
+                    const li = document.createElement('li');
+                    li.className = 'bg-white rounded-lg shadow-sm p-4 flex justify-between gap-4';
+                    const a = document.createElement('span'); a.textContent = s.nombre;
+                    const b = document.createElement('span'); b.className = 'text-neutral-500'; b.textContent = `${s.duracion_min} min`;
+                    li.append(a, b);
+                    ul.appendChild(li);
+                });
+            }
+
+            $('login').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const { error } = await db.auth.signInWithPassword({ email: $('email').value, password: $('clave').value });
+                $('loginMsg').textContent = error
+                    ? (error.message.includes('Invalid login') ? 'Email o contraseña incorrectos.' : 'Error: ' + error.message)
+                    : '';
+                if (!error) mostrar();
+            });
+
+            $('salir').addEventListener('click', async () => { await db.auth.signOut(); mostrar(); });
+
+            $('nuevo').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                if (!negocio) return;
+                const { error } = await db.from('servicios').insert({
+                    nombre: $('nombre').value.trim(),
+                    duracion_min: parseInt($('duracion').value, 10),
+                    negocio_id: negocio.id,
+                });
+                $('msg').textContent = error ? 'No se pudo guardar: ' + error.message : 'Servicio agregado.';
+                $('msg').className = error ? 'text-sm text-red-700' : 'text-sm text-green-700';
+                if (!error) { $('nombre').value = ''; $('duracion').value = ''; cargarServicios(); }
+            });
+
+            $('irRegistro').addEventListener('click', () => {
+                $('login').classList.add('hidden'); $('linkRegistro').classList.add('hidden'); $('registro').classList.remove('hidden');
+            });
+            $('irLogin').addEventListener('click', () => {
+                $('registro').classList.add('hidden'); $('login').classList.remove('hidden'); $('linkRegistro').classList.remove('hidden');
+            });
+
+            $('registro').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const { data, error } = await db.auth.signUp({
+                    email: $('rEmail').value.trim(),
+                    password: $('rClave').value,
+                    options: { data: { negocio_nombre: $('rNegocio').value.trim(), rubro: $('rRubro').value } },
+                });
+                const msg = $('regMsg');
+                if (error) { msg.textContent = 'No se pudo registrar: ' + error.message; msg.className = 'text-sm text-red-700'; return; }
+                if (data.session) { mostrar(); }
+                else { msg.textContent = 'Listo. Revisá tu email para confirmar la cuenta y después ingresá.'; msg.className = 'text-sm text-green-700'; }
+            });
+
+            mostrar();
+        </script>
+    </body>
+
+</html>
