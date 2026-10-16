@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="es">
+
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Turnero · Servicios</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+
+    <body class="bg-[#F3EAD9] text-neutral-900 min-h-screen">
+        <main class="max-w-xl mx-auto p-6">
+            <h1 class="text-3xl font-bold text-[#6B1020] mb-6">Servicios</h1>
+
+            <form id="form" class="bg-white rounded-xl shadow p-5 space-y-4 mb-8">
+                <div>
+                    <label for="nombre" class="block text-sm font-medium mb-1">Nombre del servicio</label>
+                    <input id="nombre" required maxlength="80"
+                        class="w-full border border-neutral-300 rounded-lg px-3 py-2" placeholder="Ej: Corte de pelo">
+                </div>
+                <div>
+                    <label for="duracion" class="block text-sm font-medium mb-1">Duración (minutos)</label>
+                    <input id="duracion" type="number" min="5" step="5" required
+                        class="w-full border border-neutral-300 rounded-lg px-3 py-2" placeholder="Ej: 45">
+                </div>
+                <div>
+                    <label for="negocio" class="block text-sm font-medium mb-1">Negocio</label>
+                    <select id="negocio" required
+                        class="w-full border border-neutral-300 rounded-lg px-3 py-2"></select>
+                </div>
+                <button type="submit"
+                    class="w-full bg-[#6B1020] text-white font-semibold rounded-lg py-2 hover:opacity-90">
+                    Agregar servicio
+                </button>
+                <p id="msg" class="text-sm"></p>
+            </form>
+
+            <h2 class="text-xl font-semibold text-[#6B1020] mb-3">Servicios cargados</h2>
+            <ul id="lista" class="space-y-2"></ul>
+        </main>
+
+        <script>
+            const $ = (id) => document.getElementById(id);
+            let negocios = [];
+
+            async function cargarNegocios() {
+                const r = await fetch('/negocios');
+                negocios = await r.json();
+                negocios.forEach((n) => {
+                    const o = document.createElement('option');
+                    o.value = n.id;
+                    o.textContent = n.nombre;
+                    $('negocio').appendChild(o);
+                });
+            }
+
+            async function cargarServicios() {
+                const r = await fetch('/servicios');
+                const data = await r.json();
+                const ul = $('lista');
+                ul.replaceChildren();
+                data.forEach((s) => {
+                    const li = document.createElement('li');
+                    li.className = 'bg-white rounded-lg shadow-sm p-4 flex justify-between gap-4';
+                    const nombre = document.createElement('span');
+                    nombre.textContent = s.nombre;
+                    const detalle = document.createElement('span');
+                    detalle.className = 'text-neutral-500 text-right';
+                    const neg = negocios.find((n) => n.id === s.negocio_id);
+                    detalle.textContent = `${s.duracion_min} min · ${neg ? neg.nombre : ''}`;
+                    li.append(nombre, detalle);
+                    ul.appendChild(li);
+                });
+            }
+
+            $('form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const body = {
+                    nombre: $('nombre').value.trim(),
+                    duracion_min: parseInt($('duracion').value, 10),
+                    negocio_id: Number($('negocio').value),
+                };
+                const r = await fetch('/servicios', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                const msg = $('msg');
+                if (r.ok) {
+                    msg.textContent = 'Servicio agregado.';
+                    msg.className = 'text-sm text-green-700';
+                    $('nombre').value = '';
+                    $('duracion').value = '';
+                    cargarServicios();
+                } else {
+                    const err = await r.json();
+                    msg.textContent = 'No se pudo guardar: ' + (err.error || 'error');
+                    msg.className = 'text-sm text-red-700';
+                }
+            });
+
+            (async () => {
+                await cargarNegocios();
+                await cargarServicios();
+            })();
+        </script>
+    </body>
+
+</html>
